@@ -1,0 +1,94 @@
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define RST_PIN 9
+#define SS_PIN 10
+
+int dirPinR   = 4;
+int speedPinR = 5;
+int dirPinL   = 7;
+int speedPinL = 6;
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+//Coordinate variable type
+struct Point { uint8_t x, y; };
+
+void setup() {
+  pinMode(dirPinR, OUTPUT);  // A_DIR
+  pinMode(speedPinR, OUTPUT);  // A_SPEED
+  pinMode(dirPinL, OUTPUT);  // B_DIR
+  pinMode(speedPinL, OUTPUT);  // B_SPEED
+
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  Serial.println("Scan an RFID card to get its UID...");
+}
+
+// Lookup table
+const byte knownUIDs[36][4] = {
+  //{0,0} - Top Left {5,5} - Bottom Right 
+  {0xCF,0x26,0x0F,0x3D},{0xB3,0x54,0x0F,0x3D},{0xD1,0x00,0x12,0x3D},{0x07,0xD6,0x12,0x3D},{0xC8,0xE5,0x0F,0x3D},{0xA7,0x59,0x38,0x03},
+  {0x50,0x2C,0x0F,0x3D},{0xF0,0xFC,0x0E,0x3D},{0x22,0xD9,0x12,0x3D},{0xC2,0xCD,0x12,0x3D},{0x72,0x71,0x12,0x3D},{0xDB,0xDA,0x12,0x3D},
+  {0xFC,0x12,0x12,0x3D},{0x49,0xB9,0x12,0x3D},{0x93,0x05,0x12,0x3D},{0x2B,0x7D,0x12,0x3D},{0x61,0x12,0x3D,0x3D},{0xFD,0x60,0x12,0x3D},
+  {0x86,0xB4,0x0E,0x3D},{0xAE,0x9A,0x0E,0x3D},{0x29,0x3D,0x0F,0x3D},{0x7D,0x95,0x0E,0x3D},{0x40,0x5D,0x0F,0x3D},{0x6F,0x59,0x0F,0x3D},
+  {0x14,0xD4,0x0E,0x3D},{0x7E,0x59,0x0F,0x3D},{0x61,0x07,0x10,0x3D},{0x52,0x08,0x0F,0x3D},{0x9C,0x40,0x12,0x3D},{0x34,0x3F,0x0F,0x3D},
+  {0x7A,0x9C,0x0F,0x3D},{0x40,0x94,0x0E,0x3D},{0x21,0x92,0x0F,0x3D},{0x6D,0xBA,0x12,0x3D},{0xA6,0x9A,0x0F,0x3D},{0x65,0x14,0x12,0x3D}
+};
+
+const Point coordinates[36] = {
+  {0,0},{0,1},{0,2},{0,3},{0,4},{0,5},
+  {1,0},{1,1},{1,2},{1,3},{1,4},{1,5},
+  {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},
+  {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},
+  {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},
+  {5,0},{5,1},{5,2},{5,3},{5,4},{5,5},
+};
+
+// Checks if read UID is in table
+bool matchUID(const byte *uid, const byte knownUID[4]) {
+  for (int i = 0; i < 4; i++) {
+    if (uid[i] != knownUID[i]) return false;
+  }
+  return true;
+}
+
+// Finds appropriate numbered coordinate
+bool getCoordinateFromUID(const byte *uid, Point &outCoord) {
+  for (int i = 0; i < 36; i++) {
+    if (matchUID(uid, knownUIDs[i])) {
+      outCoord = coordinates[i];
+      return true;
+    }
+  }
+  return false; // Not found
+}
+
+void forward(int PWMA, int PWMB) {
+  // Motor A forward => DIR pin LOW
+  digitalWrite(dirPinR, LOW);   // A_DIR
+  analogWrite(speedPinR, PWMA);  // A_SPEED
+  
+  // Motor B forward => DIR pin LOW
+  digitalWrite(dirPinL, LOW);   // B_DIR
+  analogWrite(speedPinL, PWMB);  // B_SPEED
+}
+
+void loop(){
+  forward(128,128);
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    Point p;
+    if (getCoordinateFromUID(rfid.uid.uidByte, p)) {
+      Serial.print("I am on: (");
+      Serial.print(p.x); Serial.print(", ");
+      Serial.print(p.y); Serial.println(")");
+    } 
+    else {
+      Serial.println("❌ Unknown UID");
+    }
+
+    rfid.PICC_HaltA();
+    rfid.PCD_StopCrypto1();
+    }
+}
