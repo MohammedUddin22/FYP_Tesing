@@ -1,4 +1,4 @@
-// Arduino sketch: quadrature decoding + RPM calc + PID + serial plotting (5 s capture)
+// Arduino sketch: quadrature decoding + RPM calc + PID + serial plotting (2.5s capture)
 
 // Encoder pins
 const byte encoderPinA   = 3;  //Right3 Left2
@@ -29,7 +29,7 @@ volatile long pulses = 0;
 // Timing
 unsigned long lastSampleTime;
 unsigned long startTime;
-const unsigned long CAPTURE_MS = 2500; //5000
+const unsigned long CAPTURE_MS = 2500; //2.5s
 bool capturing = true;
 
 void setup() {
@@ -47,19 +47,18 @@ void setup() {
   lastSampleTime = millis();
   startTime      = lastSampleTime;
 
-  // header for CSV
   Serial.println("time_ms,RPM");
 }
 
 void loop() {
-  if (!capturing) return;        // after 5 s, stop printing
+  if (!capturing) return; 
 
   unsigned long now = millis();
   unsigned long elapsed = now - startTime;
 
   if (elapsed > CAPTURE_MS) {
     capturing = false;
-    //Optionally, you could stop the motor here:
+    //Stop  motor here:
     analogWrite(speedPinR, 0);
     return;
   }
@@ -80,19 +79,17 @@ void loop() {
     // PID
     float error = setpointRPM - rpm;
     integral += error * dt;
-    float alpha = 0;  // 0 = no filter, 1 = full filter (very slow)
-    float derivative = (error - lastError) / dt; //dUnfiltered easlier
-    //float derivative = alpha * derivative + (1 - alpha) * dUnfiltered;
+    float derivative = (error - lastError) / dt; 
 
-    //float maxI = 255.0;    // tune to something slightly less than 255*Ki
-    //integral = constrain(integral, -maxI, +maxI); //anti-windup
+    float maxI = 235.0;    // tune to something slightly less than 255*Ki
+    integral = constrain(integral, -maxI, +maxI); //anti-windup
     float output = kp * error + ki * integral + kd * derivative;
     lastError = error;
     
     // determine direction & PWM
     bool forward = (output >= 0);
     int pwm = constrain((int)abs(output), 0, 255);
-    /*const int pwmDeadband = 30;    // your measured break‑away
+    const int pwmDeadband = 30;    //break‑away
     if (abs(pwm) < pwmDeadband) {
       pwm = pwm + pwmDeadband;                      // treat anything below as “off”
     }*/
@@ -100,7 +97,7 @@ void loop() {
     digitalWrite(dirPinR, forward ? LOW : HIGH);
     analogWrite(speedPinR, pwm);
 
-    // print CSV: elapsed time, RPM, error, output, PWM
+    // print elapsed time and RPM
     Serial.print(elapsed, 1); Serial.print(',');
     Serial.println(rpm, 1);    
 
