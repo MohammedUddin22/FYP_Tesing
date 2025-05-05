@@ -1,16 +1,16 @@
-// === Encoder Pins ===
+//  Encoder Pins 
 const byte RencoderPinA = 3;
 const byte RencoderPinB = 18;
 const byte LencoderPinA = 2;
 const byte LencoderPinB = 19;
 
-// === Motor Control Pins ===
+//  Motor Control Pins 
 const byte dirPinR = 4;
 const byte speedPinR = 5;
 const byte dirPinL = 7;
 const byte speedPinL = 6;
 
-// === Constants ===
+//  Constants 
 const float PULSES_PER_REV = 960.0;
 const unsigned long SAMPLE_MS = 100;
 float setpointRPM = 80.0;  //40
@@ -22,20 +22,12 @@ const float wheelDiameterCM = 6.0;
 const float wheelCircumference = PI * wheelDiameterCM;
 const float pulsesPerCM = PULSES_PER_REV / wheelCircumference;
 
-// === Encoder Variables ===
+// Encoder Variables 
 volatile long totalPulsesR = 0;
 volatile long totalPulsesL = 0;
 
 // === Timing ===
 unsigned long lastSampleTime;
-
-// === Coordinates and Grid ===
-struct Point { int x, y; };
-const float GRID_SIZE_CM = 10.0;
-
-// === Direction ===
-enum Direction { NORTH=0, EAST=1, SOUTH=2, WEST=3 };
-Direction currentDir = NORTH;
 
 // === PID Controller Class ===
 class PIDController {
@@ -69,7 +61,6 @@ public:
   return pwm;
 }
 
-
   bool direction() {
     return output >= 0;
   }
@@ -80,8 +71,8 @@ public:
   }
 };
 
-PIDController pidR(1, 5.6, 0.01, 30);
-PIDController pidL(1, 5.8, 0.01, 30);
+PIDController pidR(3.32, 22.3, 0.01, 30);
+PIDController pidL(3.22, 22.3, 0.01, 30);
 
 void setup() {
   Serial.begin(9600);
@@ -97,30 +88,24 @@ void setup() {
 
   lastSampleTime = millis();
 
-  Point path[] = { {1,1},{1,2},{2,2},{2,3},{3,3},{4,3},{4,2} };
-  int pathLen = sizeof(path) / sizeof(path[0]);
-  for (int i = 1; i < pathLen; i++) {
-    pathMovement(path[i-1], path[i]);
-  }
-
 }
 
 void loop() {
-  //moveForward(1);
-  //delay(500);
+  moveForward(1);
+  delay(500);
 
-  //turnLeft();
-  //delay(500);
+  turnLeft();
+  delay(500);
 
-  //moveBackwards(1);
-  //delay(500);
+  moveBackwards(1);
+  delay(500);
 
-  //turnRight();
-  //delay(500);
+  turnRight();
+  delay(500);
 }
 
 
-// === Encoder ISRs ===
+//  Encoder ISRs 
 void wheelISR_R() {
   totalPulsesR += digitalRead(RencoderPinB) == HIGH ? 1 : -1;
 }
@@ -128,47 +113,8 @@ void wheelISR_L() {
   totalPulsesL += digitalRead(LencoderPinB) == HIGH ? -1 : +1;
 }
 
-void pathMovement(Point start, Point goal) {
-  Point cur = start;
 
-  // assume goal is adjacent (check abs(dx)+abs(dy)==1 if you like)
-  int dx = goal.x - cur.x;
-  int dy = goal.y - cur.y;
-
-  // decide which cardinal we need
-  // if x increase 1, we go right. if y increase up 1 we go forward
-  // turnTo used to make make sure facing correct direction
-  if      (dx ==  1) turnTo(EAST);
-  else if (dx == -1) turnTo(WEST);
-  else if (dy ==  1) turnTo(NORTH);
-  else if (dy == -1) turnTo(SOUTH);
-  else {
-    Serial.println("Error: non-adjacent!");
-    return;
-  }
-
-  // now we’re facing exactly the right way—go one cell forward
-  moveForward(1);
-
-  // update our software position
-  cur = goal;
-}
-
-void turnTo(Direction target) {
-  // compute difference in [0..3] e.g modulo 4
-  // cardinal direction
-  int diff = ((int)target - (int)currentDir + 4) % 4;
-
-  if      (diff == 1)        turnRight();           //  90° CW
-  else if (diff == 2) {      turnRight(); turnRight(); } // 180°
-  else if (diff == 3)        turnLeft();            //  90° CCW
-  // if diff==0, we’re already pointing at target
-
-  // after calling turnLeft()/turnRight(), currentDir is auto-updated
-  // by those functions, so now currentDir == target
-}
-
-// === Forward Function with Debug ===
+//  Forward Function 
 void moveForward(int gridunit) {
   float targetPulses = gridunit * GRID_SIZE_CM * pulsesPerCM; 
   noInterrupts(); totalPulsesR = 0; totalPulsesL = 0; interrupts();
@@ -204,16 +150,6 @@ void moveForward(int gridunit) {
       analogWrite(speedPinR, pwmR);
       analogWrite(speedPinL, pwmL);
 
-      //Serial.print("R Δ: "); Serial.print(currentPulsesR);
-      //Serial.print(" RPM: "); Serial.print(rpmR, 1);
-      //Serial.print(" PWM: "); Serial.print(pwmR);
-      //Serial.print(" Dir: "); Serial.print(pidR.direction() ? "FWD" : "REV");
-
-      //Serial.print(" | L Δ: "); Serial.print(currentPulsesL);
-      //Serial.print(" RPM: "); Serial.print(rpmL, 1);
-      //Serial.print(" PWM: "); Serial.print(pwmL);
-      //Serial.print(" Dir: "); Serial.println(pidL.direction() ? "FWD" : "REV");
-
       lastSampleTime = now;
       lastPulsesR = currentPulsesR;
       lastPulsesL = currentPulsesL;
@@ -231,70 +167,7 @@ void moveForward(int gridunit) {
   delay(300);
 }
 
-// === Reverse Function with Debug
-void moveBackwards(int gridunit) {
-  float targetPulses = gridunit * GRID_SIZE_CM * pulsesPerCM *(-1); 
-  noInterrupts(); totalPulsesR = 0; totalPulsesL = 0; interrupts();
-  pidR.reset(); pidL.reset();
-  lastSampleTime = millis();
-  long lastPulsesR = 0, lastPulsesL = 0;
-  unsigned long startTime = millis();
-
-  while (true) {
-    unsigned long now = millis();
-    if (now - startTime > 7000) break;
-
-    noInterrupts();
-    long currentPulsesR = totalPulsesR;
-    long currentPulsesL = totalPulsesL;
-    interrupts();
-
-    if ((targetPulses > 0 && currentPulsesR >= targetPulses && currentPulsesL >= targetPulses) ||
-        (targetPulses < 0 && currentPulsesR <= targetPulses && currentPulsesL <= targetPulses)) {
-      break;
-    }
-
-    if (now - lastSampleTime >= SAMPLE_MS) {
-      float dt = (now - lastSampleTime) / 1000.0;
-      float rpmR = ((currentPulsesR - lastPulsesR) / PULSES_PER_REV) * (60.0 / dt);
-      float rpmL = ((currentPulsesL - lastPulsesL) / PULSES_PER_REV) * (60.0 / dt);
-
-      int pwmR = pidR.compute(-setpointRPM, rpmR, dt);
-      int pwmL = pidL.compute(-setpointRPM, rpmL, dt);
-
-      digitalWrite(dirPinR, pidR.direction() ? LOW : HIGH);
-      digitalWrite(dirPinL, pidL.direction() ? LOW : HIGH);
-      analogWrite(speedPinR, pwmR);
-      analogWrite(speedPinL, pwmL);
-
-      //Serial.print("R Δ: "); Serial.print(currentPulsesR);
-      //Serial.print(" RPM: "); Serial.print(rpmR, 1);
-      //Serial.print(" PWM: "); Serial.print(pwmR);
-      //Serial.print(" Dir: "); Serial.print(pidR.direction() ? "FWD" : "REV");
-
-      //Serial.print(" | L Δ: "); Serial.print(currentPulsesL);
-      //Serial.print(" RPM: "); Serial.print(rpmL, 1);
-      //Serial.print(" PWM: "); Serial.print(pwmL);
-      //Serial.print(" Dir: "); Serial.println(pidL.direction() ? "FWD" : "REV");
-
-      lastSampleTime = now;
-      lastPulsesR = currentPulsesR;
-      lastPulsesL = currentPulsesL;
-    }
-  }
-
-  analogWrite(speedPinR, 0);
-  analogWrite(speedPinL, 0);
-
-  Serial.print("Final Pulses R: ");
-  Serial.print(totalPulsesR);
-  Serial.print(" | L: ");
-  Serial.println(totalPulsesL);
-
-  delay(300);
-}
-
-// === Turn Left with Debug ===
+//  Turn Left 
 void turnLeft() {
   float arcLength = (PI * wheelBaseCM) / 4.0;
   long targetPulses = arcLength * pulsesPerCM;
@@ -333,8 +206,6 @@ void turnLeft() {
 
       int pwmR = pidR.compute(setpointR, rpmR, dt);
       int pwmL = pidL.compute(setpointL, rpmL, dt);
-      if (pwmR > 0 && pwmR < 30) pwmR = 30;
-      if (pwmL > 0 && pwmL < 30) pwmL = 30;
 
       digitalWrite(dirPinR, pidR.direction() ? LOW : HIGH);
       digitalWrite(dirPinL, pidL.direction() ? LOW : HIGH);
@@ -359,7 +230,7 @@ void turnLeft() {
   delay(300);
 }
 
-// === Turn Right with Debug ===
+// Turn Right
 // R motor reverses and L moves forward
 void turnRight() {
   float arcLength = (PI * wheelBaseCM) / 4.0;
@@ -393,8 +264,6 @@ void turnRight() {
 
       int pwmR = pidR.compute(setpointR, rpmR, dt);
       int pwmL = pidL.compute(setpointL, rpmL, dt);
-      if (pwmR > 0 && pwmR < 30) pwmR = 30;
-      if (pwmL > 0 && pwmL < 30) pwmL = 30;
 
       digitalWrite(dirPinR, pidR.direction() ? LOW : HIGH);
       digitalWrite(dirPinL, pidL.direction() ? LOW : HIGH);
